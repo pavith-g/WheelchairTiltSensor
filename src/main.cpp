@@ -23,10 +23,10 @@ bool buzzerOn = false;
 
 
 const int buzzerPin = 2;
-const int switchPin = 4;
+const int potPin = A0;
 
 const float firstThreshold = 5;
-const float secondThreshold = 10;
+float secondThreshold = 10; // Adjusted by pot
 
 const float alpha = 0.98; // Filter coefficient for pitch calc
 float dt = 0.01; // Time step for pitch 100Hz
@@ -34,8 +34,6 @@ float dt = 0.01; // Time step for pitch 100Hz
 float x, y, z;
 float gx, gy, gz; // Raw gyroscope data (deg/s)
 long lastPitchTime;
-
-
 
 float pitch = 0;
 float initialPitch = 0;
@@ -55,7 +53,6 @@ void setup() {
   }
 
   pinMode(buzzerPin, OUTPUT);
-  pinMode(switchPin, INPUT);
 
   // Set the initial pitch on startup. Calculate offset from this value.
   while (!IMU.accelerationAvailable()) {
@@ -82,9 +79,11 @@ void loop() {
     pointsAdded = 0;
   }
 
-  int switchState = digitalRead(switchPin);
+  // Dynamically set value of second threhold. 
+  int potVal = analogRead(potPin);
+  secondThreshold = mapFloat(potVal, 0, 1023, 10, 50);
 
-  if (switchState == LOW) {
+  if (offsetPitch >= secondThreshold) {
     buzzerMode = false;
   }
   else if (offsetPitch >= firstThreshold) {
@@ -95,10 +94,10 @@ void loop() {
   }
 
   
-  Serial.print(switchState);
+  Serial.print(secondThreshold);
   Serial.print("  --  ");
   Serial.println(offsetPitch);
-
+  
   updateBuzzer();
 }
 

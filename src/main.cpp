@@ -10,9 +10,16 @@ float getPitch(float oldPitch, bool initial);
 // Updates buzzer state (run once per loop)
 void updateBuzzer();
 
-float mapFloat(float x, float inMin, float inMax, float outMin, float outMax) {
-  float ratio = (x - inMin) / (inMax - inMin);
-  return outMin + ratio * (outMax - outMin);
+float mapFloat(float input, float inMin, float inMax, float outMin, float outMax) {
+  // Normalise input
+  float k = 6; // Sharpness factor. Higher value - sharper increase earlier in graph. 
+  float x = (input - inMin) / (inMax - inMin);
+  if (x < 0) x = 0;
+  if (x > 1) x = 1;
+
+  float y = log(1 + k * x) / log(1 + k);
+
+  return outMin + y * (outMax - outMin);
 }
 
 
@@ -26,7 +33,7 @@ const int buzzerPin = 2;
 const int potPin = A0;
 
 const float firstThreshold = 5;
-float secondThreshold = 10; // Adjusted by pot
+float secondThreshold; // Adjusted by pot
 
 const float alpha = 0.98; // Filter coefficient for pitch calc
 float dt = 0.01; // Time step for pitch 100Hz
@@ -149,7 +156,7 @@ void updateBuzzer() {
     angle = secondThreshold;
   }
 
-  int minPeriod = 200; 
+  int minPeriod = 50; 
   int maxPeriod = 1000;
 
   int cyclePeriod = mapFloat(angle, firstThreshold, secondThreshold, maxPeriod, minPeriod);

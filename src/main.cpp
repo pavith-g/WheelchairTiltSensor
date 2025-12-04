@@ -22,6 +22,14 @@ float mapFloat(float input, float inMin, float inMax, float outMin, float outMax
   return outMin + y * (outMax - outMin);
 }
 
+void getIMUData(float &ax, float &ay, float &az, float &mx, float &my, float &mz, float &gx, float &gy, float &gz) {
+  if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable() && IMU.magneticFieldAvailable()) {
+    IMU.readAcceleration(ax, ay, az);
+    IMU.readGyroscope(gx, gy, gz);
+    IMU.readMagneticField(mx, my, mz);
+  }
+}
+
 
 bool buzzerMode = false;
 
@@ -29,19 +37,19 @@ unsigned long buzzerTimer = 0;
 bool buzzerOn = false;
 
 
-const int buzzerPin = 2;
+const int buzzerPin = 3;
 const int potPin = A0;
 
-const float firstThreshold = 5;
+const float firstThreshold = 2;
 float secondThreshold; // Adjusted by pot
 
 const float alpha = 0.98; // Filter coefficient for pitch calc
 float dt = 0.01; // Time step for pitch 100Hz
 
-float x, y, z;
-float gx, gy, gz; // Raw gyroscope data (deg/s)
+float ax, ay, az, gx, gy, gz, mx, my, mz;
 long lastPitchTime;
 
+bool gotInitialPitch = false;
 float pitch = 0;
 float initialPitch = 0;
 float offsetPitch = 0;
@@ -65,30 +73,28 @@ void setup() {
   while (!IMU.accelerationAvailable()) {
     Serial.println("waiting...");
   }
-  IMU.readAcceleration(x, y, z);
-  initialPitch = getPitch(0, true);
-  pitch = initialPitch;
-  lastPitchTime = micros();
 }
 
 void loop() {
-  if (IMU.accelerationAvailable()) {
-    IMU.readAcceleration(x, y, z); // g
-    IMU.readGyroscope(gx, gy, gz); // deg/s
-  } 
+  getIMUData(ax, ay, az, mx, my, mz, gx, gy, gz);
 
   float newPitch = getPitch(pitch, false);
   offsetPitch = newPitch - initialPitch;
   pitch = newPitch;
 
-  pointsAdded++;
-  if (pointsAdded >= pointsTotal) {
-    pointsAdded = 0;
+  if (!gotInitialPitch) {
+    initialPitch = pitch;
+    gotInitialPitch = true;
   }
+
+  offsetPitch = pitch - initialPitch;
+  Serial.print(buzzerMode);
+  Serial.print("\tinit:\t"); Serial.print(initialPitch);
+  Serial.print("\tPitch:\t"); Serial.println(offsetPitch);  
 
   // Dynamically set value of second threhold. 
   int potVal = analogRead(potPin);
-  secondThreshold = mapFloat(potVal, 0, 1023, 10, 50);
+  secondThreshold = mapFloat(potVal, 0, 1023, 5, 20);
 
   if (offsetPitch >= secondThreshold) {
     buzzerMode = false;
@@ -99,37 +105,7 @@ void loop() {
   else {
     buzzerMode = false;
   }
-
-  
-  Serial.print(secondThreshold);
-  Serial.print("  --  ");
-  Serial.println(offsetPitch);
-  
   updateBuzzer();
-}
-
-float getPitch(float oldPitch, bool initial) {
-  
-  // float mag = sqrt(x * x + y * y + z * z);
-  // if (mag == 0) mag = 1;
-  // float nP = acos(z / mag) * 180 / PI;
-  // if (!initial) {
-  //   nP = 0.9 * oldPitch + 0.1 * nP;
-  // }
-  // return nP;
-
-  if (initial) {
-    return atan2(x, z) * (180 / PI);
-  }
-
-  dt = (micros() - lastPitchTime) / 1000000.0;
-  lastPitchTime = micros();
-
-  float accAngle = atan2(x, z) * (180 / PI);
-  float gyroComp = pitch + gy * dt;
-
-  pitch = alpha * gyroComp + (1 - alpha) * accAngle;
-  return pitch;
 }
 
 void updateBuzzer() {
@@ -160,7 +136,6 @@ void updateBuzzer() {
   int maxPeriod = 1000;
 
   int cyclePeriod = mapFloat(angle, firstThreshold, secondThreshold, maxPeriod, minPeriod);
-  int pitch = 2300;
 
   int halfPeriod = cyclePeriod / 2;
   if (halfPeriod < 100) halfPeriod = 100;
@@ -172,12 +147,26 @@ void updateBuzzer() {
     buzzerOn = !buzzerOn;
 
     if (buzzerOn) {
-      tone(buzzerPin, pitch);
+      digitalWrite(buzzerPin, HIGH);
     }
-    else {
-      noTone(buzzerPin);
-      pinMode(buzzerPin, OUTPUT);
+    else {      
       digitalWrite(buzzerPin, LOW);
     }
   }
+}
+
+float getPitch(float oldPitch, bool initial) {
+
+  if (initial) {
+    return atan2(ax, az) * (180 / PI);
+  }
+
+  dt = (micros() - lastPitchTime) / 1000000.0;
+  lastPitchTime = micros();
+
+  float accAngle = atan2(ax, az) * (180 / PI);
+  float gyroComp = pitch + gy * dt;
+
+  pitch = alpha * gyroComp + (1 - alpha) * accAngle;
+  return pitch;
 }
